@@ -17,9 +17,9 @@ async function startServer() {
     // Attach Socket.IO here
     initSocket(server);
 
-    server.listen(PORT, () => {
-      console.log(`SwiftRide API running on http://localhost:${PORT}/api/`);
-      console.log(`Socket.IO running on http://localhost:${PORT}`);
+    server.listen(PORT, "0.0.0.0", () => {
+      console.log(`SwiftRide API running on http://192.168.1.7:${PORT}/api/`);
+      console.log(`Socket.IO running on http://192.168.1.7:${PORT}`);
     });
   } catch (error) {
     console.error("Failed to start server:", error);
@@ -28,3 +28,5 @@ async function startServer() {
 }
 
 startServer();
+
+// Trigger nodemon restart
