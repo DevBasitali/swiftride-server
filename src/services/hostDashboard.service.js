@@ -14,6 +14,18 @@ export const getHostDashboardStats = async (userId) => {
   // For monthly earnings: last 6 months (you can change to 12)
   const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
 
+  const sevenDaysAgo = new Date(now);
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+  const thirtyDaysAgo = new Date(now);
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  const dayBeforeYesterday = new Date(now);
+  dayBeforeYesterday.setDate(dayBeforeYesterday.getDate() - 2);
+
   // 1) Quick stats in parallel
   const [
     totalCars,
@@ -23,7 +35,13 @@ export const getHostDashboardStats = async (userId) => {
     thisMonthEarningsAgg,
     monthlyEarningsAgg,
     bookingStatusAgg,
-    recentBookings
+    recentBookings,
+    // Trend data
+    recentActiveBookings,
+    pendingToday,
+    pendingYesterday,
+    newCarsThisMonth,
+    newTripsThisMonth
   ] = await Promise.all([
     // totalCars: active cars owned by this host/showroom
     Car.countDocuments({ owner: ownerId, isActive: true }),
@@ -142,7 +160,18 @@ export const getHostDashboardStats = async (userId) => {
       .sort({ createdAt: -1 })
       .limit(5)
       .populate("car", "make model")
-      .lean()
+      .lean(),
+
+    // Trend queries
+    Booking.countDocuments({
+      owner: ownerId,
+      status: { $in: ["confirmed", "ongoing"] },
+      createdAt: { $gte: sevenDaysAgo }
+    }),
+    Booking.countDocuments({ owner: ownerId, status: "pending", createdAt: { $gte: yesterday } }),
+    Booking.countDocuments({ owner: ownerId, status: "pending", createdAt: { $gte: dayBeforeYesterday, $lt: yesterday } }),
+    Car.countDocuments({ owner: ownerId, createdAt: { $gte: thirtyDaysAgo } }),
+    Booking.countDocuments({ owner: ownerId, createdAt: { $gte: startOfThisMonth } }),
   ]);
 
   const totalEarnings =
@@ -187,11 +216,18 @@ export const getHostDashboardStats = async (userId) => {
       b.status === "pending"
         ? "booking_request"
         : b.status === "confirmed"
-        ? "booking_confirmed"
-        : "booking_update",
+          ? "booking_confirmed"
+          : "booking_update",
     message: generateActivityMessage(b),
     date: b.createdAt
   }));
+
+  // Trend calculation
+  const activeBookingsTrend = `+${recentActiveBookings} this week`;
+  const pendingDiff = pendingToday - pendingYesterday;
+  const pendingRequestsTrend = pendingDiff >= 0 ? `+${pendingDiff} from yesterday` : `${pendingDiff} from yesterday`;
+  const totalCarsTrend = `${newCarsThisMonth} newly added`;
+  const totalBookingsTrend = `+${newTripsThisMonth} this month`;
 
   return {
     quickStats: {
@@ -200,6 +236,12 @@ export const getHostDashboardStats = async (userId) => {
       pendingRequests,
       totalEarnings,
       thisMonthEarnings
+    },
+    trends: {
+      activeBookingsTrend,
+      pendingRequestsTrend,
+      totalCarsTrend,
+      totalBookingsTrend
     },
     charts: {
       monthlyEarnings,
