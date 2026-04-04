@@ -95,7 +95,113 @@ export const createCar = catchAsync(async (req, res) => {
 export const updateCar = catchAsync(async (req, res) => {
   const { carId } = req.params;
   const userId = req.user.id;
-  const updateBody = req.body;
+  const payload = req.body;
+
+  // 1. Handle File Uploads (Photos)
+  const photosFiles = req.files?.photos || [];
+  let newPhotoUrls = [];
+  if (photosFiles.length > 0) {
+    const photoUploads = await Promise.all(
+      photosFiles.map((file) => uploadToCloudinary(file.buffer, "car_photos"))
+    );
+    newPhotoUrls = photoUploads.map(result => result.secure_url);
+  }
+
+  // Handle existing photos
+  let existingPhotos = [];
+  if (payload.existingPhotos) {
+    try {
+      existingPhotos = JSON.parse(payload.existingPhotos);
+      if (!Array.isArray(existingPhotos)) existingPhotos = [payload.existingPhotos];
+    } catch {
+      existingPhotos = [payload.existingPhotos];
+    }
+  }
+
+  // 2. Handle Insurance Doc (Optional Update)
+  const insuranceFile = req.files?.insuranceDoc ? req.files.insuranceDoc[0] : null;
+  let insuranceDocUrl = payload.existingInsuranceDoc || undefined;
+  if (insuranceFile) {
+    const uploadRes = await uploadToCloudinary(insuranceFile.buffer, "car_insurance");
+    insuranceDocUrl = uploadRes.secure_url;
+  }
+
+  // 3. Reconstruct updateBody safely
+  const updateBody = { ...payload };
+  
+  // Convert numbers
+  if (payload.year !== undefined) updateBody.year = Number(payload.year);
+  if (payload.pricePerHour !== undefined) updateBody.pricePerHour = Number(payload.pricePerHour);
+  if (payload.pricePerDay !== undefined) updateBody.pricePerDay = Number(payload.pricePerDay);
+  if (payload.seats !== undefined) updateBody.seats = Number(payload.seats);
+
+  // Convert location
+  if (payload.locationAddress !== undefined || payload.locationLat !== undefined || payload.locationLng !== undefined) {
+    updateBody.location = {
+      address: payload.locationAddress,
+      lat: payload.locationLat !== undefined ? Number(payload.locationLat) : undefined,
+      lng: payload.locationLng !== undefined ? Number(payload.locationLng) : undefined
+    };
+  }
+
+  // Convert availability
+  if (payload.availabilityStartTime || payload.availabilityDaysOfWeek) {
+    updateBody.availability = {
+      startTime: payload.availabilityStartTime || "00:00",
+      endTime: payload.availabilityEndTime || "23:59",
+      isAvailable: payload.availabilityIsAvailable === "true" || payload.availabilityIsAvailable === true,
+      daysOfWeek: (() => {
+        if (!payload.availabilityDaysOfWeek) return [0, 1, 2, 3, 4, 5, 6];
+        try {
+          const parsed = JSON.parse(payload.availabilityDaysOfWeek);
+          return Array.isArray(parsed) ? parsed : [0, 1, 2, 3, 4, 5, 6];
+        } catch { return [0, 1, 2, 3, 4, 5, 6]; }
+      })()
+    };
+  }
+
+  // Features
+  if (payload.features !== undefined) {
+    if (typeof payload.features === "string") {
+      updateBody.features = payload.features.split(",").map((f) => f.trim()).filter(Boolean);
+    } else if (Array.isArray(payload.features)) {
+      updateBody.features = payload.features;
+    }
+  }
+
+  // Insurance Details
+  if (payload.insuranceProvider !== undefined) {
+    updateBody.insuranceDetails = {
+      provider: payload.insuranceProvider,
+      policyNumber: payload.insurancePolicyNumber,
+      type: payload.insuranceType,
+      startDate: payload.insuranceStartDate,
+      expiryDate: payload.insuranceExpiryDate,
+      documentUrl: insuranceDocUrl
+    };
+  }
+
+  // Merge photos
+  if (photosFiles.length > 0 || payload.existingPhotos !== undefined) {
+    updateBody.photos = [...existingPhotos, ...newPhotoUrls];
+  }
+
+  // Cleanup top-level flat fields that were mapped to objects
+  delete updateBody.locationAddress;
+  delete updateBody.locationLat;
+  delete updateBody.locationLng;
+  delete updateBody.availabilityStartTime;
+  delete updateBody.availabilityEndTime;
+  delete updateBody.availabilityIsAvailable;
+  delete updateBody.availabilityDaysOfWeek;
+  delete updateBody.insuranceProvider;
+  delete updateBody.insurancePolicyNumber;
+  delete updateBody.insuranceType;
+  delete updateBody.insuranceStartDate;
+  delete updateBody.insuranceExpiryDate;
+  delete updateBody.existingPhotos;
+  delete updateBody.existingInsuranceDoc;
+
   const updatedCar = await carService.updateCar(carId, userId, updateBody);
   sendSuccessResponse(res, httpStatus.OK, "Car updated successfully", {
     car: updatedCar

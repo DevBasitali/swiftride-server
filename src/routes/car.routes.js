@@ -70,7 +70,10 @@ router.patch(
   "/:carId",
   authenticate,
   authorizeRoles("host", "showroom", "admin"), // Admin can also edit? Or just status.
-  // Admin usually just approves. But let's say owner updates.
+  carUpload.fields([
+    { name: "photos", maxCount: 10 },
+    { name: "insuranceDoc", maxCount: 1 }
+  ]),
   carController.updateCar
 );
 
