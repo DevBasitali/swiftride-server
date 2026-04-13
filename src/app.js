@@ -19,15 +19,18 @@ const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:3000",
   "https://swiftride-frontend.vercel.app",
-  "https://swiftride-client-9mm3u7xxh-swiftrides-projects-32109c23.vercel.app",
 ];
 
 const corsOptions = {
   origin: (origin, cb) => {
-    if (!origin) return cb(null, true); // allow no-origin (curl, server-to-server)
-    return allowedOrigins.includes(origin)
-      ? cb(null, true)
-      : cb(new Error("Not allowed by CORS"), false);
+    if (!origin) return cb(null, true);
+    if (
+      allowedOrigins.includes(origin) ||
+      origin.endsWith(".vercel.app")
+    ) {
+      return cb(null, true);
+    }
+    return cb(new Error("Not allowed by CORS"), false);
   },
   credentials: true,
   methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
