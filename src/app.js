@@ -10,7 +10,7 @@ import apiRoutes from "./routes/index.js";
 import { notFoundHandler, errorHandler } from "./middlewares/error.middleware.js";
 
 // 1. IMPORT DB CONNECTION HERE
-import connectDB from "./config/db.js"; 
+import connectDB from "./config/db.js";
 
 const app = express();
 app.set("trust proxy", 1);
@@ -19,6 +19,7 @@ const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:3000",
   "https://swiftride-frontend.vercel.app",
+  "https://swiftride-client-9mm3u7xxh-swiftrides-projects-32109c23.vercel.app",
 ];
 
 const corsOptions = {
