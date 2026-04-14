@@ -124,7 +124,7 @@ export const processReturn = catchAsync(async (req, res) => {
       throw new ApiError(httpStatus.BAD_REQUEST, "Minimum 4 images required for return verification");
   }
 
-  const booking = await Booking.findById(bookingId);
+  const booking = await Booking.findById(bookingId).populate("car", "pricePerHour");
   if (!booking) throw new ApiError(httpStatus.NOT_FOUND, "Booking not found");
 
   if (booking.owner.toString() !== req.user.id) {
@@ -134,12 +134,24 @@ export const processReturn = catchAsync(async (req, res) => {
   // Upload images
   const imageUrls = await uploadImagesToCloudinary(files);
 
+  // --- Late Fee Calculation ---
+  const actualReturn = new Date();
+  booking.actualReturnDateTime = actualReturn;
+
+  const overdueMs = actualReturn - booking.endDateTime;
+  const thirtyMinutesMs = 30 * 60 * 1000;
+
+  if (overdueMs > thirtyMinutesMs) {
+    const overdueHours = Math.ceil(overdueMs / (1000 * 60 * 60));
+    const hourlyRate = booking.car?.pricePerHour || 0;
+    booking.lateFeeAmount = overdueHours * hourlyRate * 1.5;
+  }
+
   // Update State
   booking.returnImages = imageUrls;
   booking.handoverStatus = "completed";
-  booking.status = "completed"; 
-  // Process Return Payment / refunds here if needed
-  
+  booking.status = "completed";
+
   await booking.save();
 
   // Release earnings to wallet (pending -> available)

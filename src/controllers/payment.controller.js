@@ -71,6 +71,16 @@ export const initSafepayPayment = catchAsync(async (req, res) => {
   );
 });
 
+// SAFEPAY: Init Late Fee Payment
+export const initLateFeePayment = catchAsync(async (req, res) => {
+  const { bookingId } = req.params;
+  const platform = req.query.platform || "web";
+
+  const result = await safepayService.initLateFeePayment(bookingId, req.user.id, platform);
+
+  sendSuccessResponse(res, httpStatus.OK, "Late fee payment session created", result);
+});
+
 // SAFEPAY: Webhook
 export const safepayWebhook = catchAsync(async (req, res) => {
   console.log("===================================");

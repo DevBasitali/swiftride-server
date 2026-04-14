@@ -93,7 +93,12 @@ const bookingSchema = new mongoose.Schema(
       type: String,
       enum: ["pending", "pickup_scanned", "active", "return_scanned", "completed"],
       default: "pending"
-    }
+    },
+
+    // --- Late Return Fees ---
+    actualReturnDateTime: { type: Date },
+    lateFeeAmount:        { type: Number, default: 0 },
+    isLateFeePaid:        { type: Boolean, default: false }
   },
   { timestamps: true }
 );

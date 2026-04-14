@@ -32,6 +32,14 @@ router.post(
   paymentController.initSafepayPayment
 );
 
+// 3. Late Fee Payment
+router.post(
+  "/booking/:bookingId/late-fee/safepay/init",
+  authenticate,
+  authorizeRoles("customer"),
+  paymentController.initLateFeePayment
+);
+
 // 2. Webhook Listener (Safepay server calls this)
 // Note: No auth middleware here, signature verification is handled in service
 router.post("/safepay/webhook", paymentController.safepayWebhook);

@@ -3,6 +3,8 @@ import httpStatus from "http-status";
 import ApiError from "../utils/ApiError.js";
 import { Booking } from "../models/booking.model.js";
 import * as walletService from "./wallet.service.js";
+
+const LATE_FEE_PREFIX = "LATEFEE-";
 import mongoose from "mongoose";
 
 // Initialize SDK
@@ -89,6 +91,57 @@ export const initSafepayPayment = async (bookingId, userId, platform = "web") =>
 };
 
 /**
+ * INIT LATE FEE PAYMENT
+ * Creates a Safepay checkout session for an outstanding late fee.
+ */
+export const initLateFeePayment = async (bookingId, userId, platform = "web") => {
+  const booking = await Booking.findById(bookingId).populate("customer");
+
+  if (!booking) {
+    throw new ApiError(httpStatus.NOT_FOUND, "Booking not found");
+  }
+
+  if (booking.customer._id.toString() !== userId.toString()) {
+    throw new ApiError(httpStatus.FORBIDDEN, "Unauthorized to pay for this booking");
+  }
+
+  if (!booking.lateFeeAmount || booking.lateFeeAmount <= 0) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "No late fee outstanding for this booking");
+  }
+
+  if (booking.isLateFeePaid) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Late fee is already paid");
+  }
+
+  const { token } = await safepay.payments.create({
+    amount: booking.lateFeeAmount,
+    currency: "PKR",
+  });
+
+  let cancelUrl, redirectUrl;
+
+  if (platform === "mobile") {
+    const mobileScheme = process.env.MOBILE_APP_SCHEME || "swiftride";
+    cancelUrl = `${mobileScheme}://payment/cancel`;
+    redirectUrl = `${mobileScheme}://payment/success`;
+  } else {
+    cancelUrl = `${process.env.FRONTEND_URL}/payment/cancel`;
+    redirectUrl = `${process.env.FRONTEND_URL}/payment/success`;
+  }
+
+  const url = safepay.checkout.create({
+    token,
+    orderId: `${LATE_FEE_PREFIX}${booking._id.toString()}`,
+    cancelUrl,
+    redirectUrl,
+    source: "custom",
+    webhooks: true,
+  });
+
+  return { url, token };
+};
+
+/**
  * 2. HANDLE WEBHOOK
  * - Verifies signature from Safepay
  * - Marks Booking as PAID in DB
@@ -133,7 +186,30 @@ export const handleSafepayWebhook = async (req) => {
 
       console.log(`Found Order Ref: ${orderRef}, Updating DB...`);
 
-      // --- 4. THE FIX: Smart Query Construction ---
+      // --- 4. Late Fee Branch ---
+      if (orderRef.startsWith(LATE_FEE_PREFIX)) {
+        const bookingId = orderRef.slice(LATE_FEE_PREFIX.length);
+        const booking = await Booking.findById(bookingId);
+
+        if (!booking) {
+          console.error(`Booking not found for late fee ref: ${bookingId}`);
+          return { success: false };
+        }
+
+        if (!booking.isLateFeePaid) {
+          booking.isLateFeePaid = true;
+          await booking.save();
+
+          await walletService.creditLateFeeEarning(bookingId);
+          console.log(`✅ Late fee paid for booking ${bookingId}`);
+        } else {
+          console.log("Late fee was already marked paid.");
+        }
+
+        return { success: true };
+      }
+
+      // --- 5. Regular Booking: Smart Query Construction ---
       let query = {};
 
       // Check if orderRef is a valid MongoDB ObjectId (24 hex characters)
@@ -153,11 +229,11 @@ export const handleSafepayWebhook = async (req) => {
         return { success: false };
       }
 
-      // --- 5. Update Payment Status ---
+      // --- 6. Update Payment Status ---
       if (booking.paymentStatus !== "paid") {
         booking.paymentStatus = "paid";
         booking.paymentReference = data.token;
-        
+
         // Add a history entry if you want
         booking.statusHistory.push({
           status: booking.status,

@@ -198,6 +198,33 @@ export const approveWithdrawal = async (requestId, adminNote, proofFile) => {
   return request;
 };
 
+/**
+ * Called when a late fee payment is confirmed.
+ * Credits the full lateFeeAmount directly to host's balanceAvailable.
+ */
+export const creditLateFeeEarning = async (bookingId) => {
+  const booking = await Booking.findById(bookingId);
+  if (!booking) return;
+
+  const wallet = await getOrCreateWallet(booking.owner);
+
+  wallet.balanceAvailable += booking.lateFeeAmount;
+  await wallet.save();
+
+  await WalletTransaction.create({
+    user: booking.owner,
+    booking: booking._id,
+    type: "earning",
+    status: "available",
+    amount: booking.lateFeeAmount,
+    description: `Late Return Fee — Booking #${booking._id}`,
+    balanceAfterAvailable: wallet.balanceAvailable,
+    balanceAfterPending: wallet.balancePending
+  });
+
+  return { wallet, booking };
+};
+
 export const rejectWithdrawal = async (requestId, adminNote) => {
   const request = await WithdrawalRequest.findById(requestId);
   if (!request) throw new ApiError(httpStatus.NOT_FOUND, "Request not found");

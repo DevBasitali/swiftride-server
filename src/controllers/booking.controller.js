@@ -34,6 +34,20 @@ import { Booking } from "../models/booking.model.js";
 //   });
 // });
 export const createBooking = catchAsync(async (req, res) => {
+  // Guard: block customers with unpaid late fees
+  const unpaidLateFee = await Booking.findOne({
+    customer: req.user.id,
+    lateFeeAmount: { $gt: 0 },
+    isLateFeePaid: false
+  });
+
+  if (unpaidLateFee) {
+    throw new ApiError(
+      httpStatus.FORBIDDEN,
+      `You have an outstanding late fee of PKR ${unpaidLateFee.lateFeeAmount}. Please pay it to book again.`
+    );
+  }
+
   const booking = await bookingService.createBooking(req.user.id, req.body);
 
   sendSuccessResponse(res, httpStatus.CREATED, "Booking created", {
@@ -54,6 +68,9 @@ const mapBookingSummaryForUser = (booking) => {
     totalPrice: booking.totalPrice,
     currency: booking.currency,
     isPaid: booking.paymentStatus === "paid",
+
+    lateFeeAmount: booking.lateFeeAmount || 0,
+    isLateFeePaid: booking.isLateFeePaid || false,
 
     car: booking.car
       ? {
