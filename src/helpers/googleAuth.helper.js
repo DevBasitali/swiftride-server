@@ -1,7 +1,6 @@
 import axios from "axios";
 
-// This comes from your Firebase/Google Console configuration
-const EXPECTED_AUDIENCE = "400619671340-ndjjdcr3fs8bsalutjb9ldqs1egma49v.apps.googleusercontent.com";
+const EXPECTED_AUDIENCE = process.env.GOOGLE_CLIENT_ID;
 
 export const verifyGoogleToken = async (idToken) => {
   try {
