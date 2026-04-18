@@ -196,10 +196,10 @@ const main = async () => {
     console.log("✅ Connected to MongoDB\n");
 
     // Find a host user to assign ownership
-    const hostUsers = await User.find({ role: "host" }).limit(10).lean();
+    const hostUsers = await User.find({ email: "host@gmail.com" }).lean();
     if (hostUsers.length === 0) {
-      console.log("❌ No host users found in database!");
-      console.log("   Please create at least one host account first.\n");
+      console.log("❌ No user found with email owner@gmail.com.");
+      console.log("   Please make sure this account exists and is a host.\n");
       process.exit(1);
     }
 
