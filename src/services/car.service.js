@@ -2,6 +2,7 @@ import { Car } from "../models/car.model.js";
 import { USER_ROLE } from "../models/user.model.js";
 import mongoose from "mongoose";
 import ApiError from "../utils/ApiError.js";
+import httpStatus from "http-status";
 
 const MAX_CARS_PER_USER = Number(process.env.MAX_CARS_PER_USER || 20);
 
